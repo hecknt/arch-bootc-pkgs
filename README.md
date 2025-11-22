@@ -14,9 +14,9 @@ pacman-key --lsign-key 5DE6BF3EBC86402E7A5C5D241FA48C960F9604CB
 
 And add the following to `/etc/pacman.conf`:
 ```ini
-[archzfs]
+[bootc]
 SigLevel = Required
-Server = https://github.com/archzfs/archzfs/releases/download/experimental
+Server = https://github.com/hecknt/arch-bootc-pkgs/releases/download/$repo
 ```
 
 Afterwards, sync your repositories with `pacman -Sy`, and then install a package like so:
