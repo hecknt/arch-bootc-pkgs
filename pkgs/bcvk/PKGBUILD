@@ -8,6 +8,7 @@ url='https://github.com/bootc-dev/bcvk'
 license=('Apache-2.0 OR MIT')
 makedepends=(
   cargo
+  go-md2man
 )
 depends=(
   glibc
@@ -30,7 +31,7 @@ prepare() {
 build() {
   export CARGO_TARGET_DIR=target
   cd $pkgname-$pkgver
-  make bin
+  make bin manpages
 }
 
 check() {
