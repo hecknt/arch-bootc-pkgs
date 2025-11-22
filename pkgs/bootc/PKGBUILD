@@ -7,8 +7,8 @@ arch=('x86_64')
 url="https://github.com/bootc-dev/$pkgname"
 license=('MIT OR Apache-2.0')
 depends=(gcc-libs
-    glibc
-    ostree)
+  glibc
+  ostree)
 makedepends=(cargo)
 source=("https://github.com/bootc-dev/bootc/releases/download/v$pkgver/bootc-$pkgver.tar.zstd" "pr1779.patch")
 sha256sums=('39b39a9bb92680f1690e262c7190fb9cd2d5f2dec8d2904df2bbaecd594d1118'

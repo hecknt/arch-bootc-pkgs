@@ -7,45 +7,40 @@ pkgdesc='Launches ephemeral VMs from bootc containers and creates disk images.'
 url='https://github.com/bootc-dev/bcvk'
 license=('Apache-2.0 OR MIT')
 makedepends=(
-    cargo
+  cargo
 )
 depends=(
-    glibc
-    openssh
-    qemu-system-x86
-    virtiofsd
-    podman
+  glibc
+  openssh
+  qemu-system-x86
+  virtiofsd
+  podman
 )
 arch=(x86_64)
 source=("https://github.com/bootc-dev/$pkgname/releases/download/v$pkgver/$pkgname-$pkgver.tar.zstd")
 sha256sums=('f56012088ba93607fc55a2c3ae38e7ca0bdcea128a85da8035901cdd3802566f')
 
 prepare() {
-    set -x
-    cd $pkgname-$pkgver
-    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+  cd $pkgname-$pkgver
+  patch -Np1 -i ../virtiofsd-path.patch
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-    export CARGO_TARGET_DIR=target
-    cd $pkgname-$pkgver
-    cargo build --frozen --release
+  export CARGO_TARGET_DIR=target
+  cd $pkgname-$pkgver
+  make bin
 }
 
 check() {
-    export RUST_BACKTRACE=1
-    cd $pkgname-$pkgver
-    cargo test --frozen
+  export RUST_BACKTRACE=1
+  cd $pkgname-$pkgver
+  cargo test --frozen
 }
 
 package() {
-    install -o root -g root -m 755 -d $pkgdir/usr/bin
-    install -o root -g root -m 755 -t $pkgdir/usr/bin $pkgname-$pkgver/target/release/bcvk
-
-    install -o root -g root -m 755 -d $pkgdir/usr/share/doc/$pkgname
-    install -o root -g root -m 644 -t $pkgdir/usr/share/doc/$pkgname $pkgname-$pkgver/README.md
-
-    install -o root -g root -m 755 -d $pkgdir/usr/share/licenses/$pkgname
-    install -o root -g root -m 644 -t $pkgdir/usr/share/licenses/$pkgname $pkgname-$pkgver/LICENSE-APACHE
-    install -o root -g root -m 644 -t $pkgdir/usr/share/licenses/$pkgname $pkgname-$pkgver/LICENSE-MIT
+  cd "$pkgname-$pkgver"
+  install -Dm 644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+  install -Dm 644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  make DESTDIR="$pkgdir/" install
 }
