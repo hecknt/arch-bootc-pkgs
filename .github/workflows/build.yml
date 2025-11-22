@@ -1,0 +1,29 @@
+---
+name: Build PKGBUILDs
+on:
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: "05 8 * * *" # 8:05am UTC every day
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/README.md"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build PKGBUILDs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Build PKGBUILDs
+        uses: hecknt/archlinux-pkgbuilds@v0.1.0
+        with:
+          repo_name: "bootc"
+          github_token: "${{ secrets.GITHUB_TOKEN }}"
+          gpg_key_data: "${{ secrets.GPG_KEY_DATA }}"
+          gpg_key_id: "${{ vars.GPG_KEY_ID }}"

@@ -1,0 +1,3 @@
+[submodule "pkgs/podman-tui-bin"]
+	path = pkgs/podman-tui-bin
+	url = https://aur.archlinux.org/podman-tui-bin.git
