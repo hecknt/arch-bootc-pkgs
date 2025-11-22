@@ -21,7 +21,7 @@ prepare() {
 }
 
 build() {
-	cd "$pkgname-$pkgver"
+  cd "$pkgname-$pkgver"
   export CARGO_TARGET_DIR=target
   make bin manpages
 }
@@ -33,8 +33,8 @@ check() {
 }
 
 package() {
-	cd "$pkgname-$pkgver"
+  cd "$pkgname-$pkgver"
   install -Dm 644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
   install -Dm 644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
-	make DESTDIR="$pkgdir/" install-all install-initramfs-dracut # note: remove install-initramfs-dracut when 1.11.0 comes out
+  make DESTDIR="$pkgdir/" install-all install-initramfs-dracut # note: remove install-initramfs-dracut when 1.11.0 comes out
 }
