@@ -22,5 +22,5 @@ Server = https://github.com/archzfs/archzfs/releases/download/experimental
 Afterwards, sync your repositories with `pacman -Sy`, and then install a package like so:
 
 ```bash
-pacman -S bootc-pr1779
+pacman -S bootc
 ```
