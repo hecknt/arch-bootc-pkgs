@@ -1,43 +1,40 @@
 # Maintainer: Hec <hec@heccraft.com>
-pkgname=bootc-pr1779
-_pkgname=bootc
+pkgname=bootc
 pkgver=1.10.0
 pkgrel=1
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64')
-url="https://github.com/bootc-dev/$_pkgname"
+url="https://github.com/bootc-dev/$pkgname"
 license=('MIT OR Apache-2.0')
 depends=(gcc-libs
     glibc
     ostree)
 makedepends=(cargo)
-provides=("bootc")
-conflicts=("bootc")
 source=("https://github.com/bootc-dev/bootc/releases/download/v$pkgver/bootc-$pkgver.tar.zstd" "pr1779.patch")
 sha256sums=('39b39a9bb92680f1690e262c7190fb9cd2d5f2dec8d2904df2bbaecd594d1118'
             'SKIP')
 
 prepare() {
-  cd "$_pkgname-$pkgver"
+  cd "$pkgname-$pkgver"
   patch -Np1 -i ../pr1779.patch
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-	cd "$_pkgname-$pkgver"
+	cd "$pkgname-$pkgver"
   export CARGO_TARGET_DIR=target
   make bin
 }
 
 check() {
     export RUST_BACKTRACE=1
-    cd $_pkgname-$pkgver
+    cd $pkgname-$pkgver
     cargo test --frozen
 }
 
 package() {
-	cd "$_pkgname-$pkgver"
-  install -Dm 644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$_pkgname/LICENSE-APACHE"
-  install -Dm 644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$_pkgname/LICENSE-MIT"
+	cd "$pkgname-$pkgver"
+  install -Dm 644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+  install -Dm 644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
 	make DESTDIR="$pkgdir/" install-all install-initramfs-dracut # note: remove install-initramfs-dracut when 1.11.0 comes out
 }
