@@ -6,12 +6,13 @@ pkgbase = bootc
 	arch = x86_64
 	license = MIT OR Apache-2.0
 	makedepends = cargo
+	makedepends = go-md2man
 	depends = gcc-libs
 	depends = glibc
 	depends = ostree
 	source = https://github.com/bootc-dev/bootc/releases/download/v1.10.0/bootc-1.10.0.tar.zstd
 	source = pr1779.patch
 	sha256sums = 39b39a9bb92680f1690e262c7190fb9cd2d5f2dec8d2904df2bbaecd594d1118
-	sha256sums = SKIP
+	sha256sums = c6ab974a80242372b07891c51b3b9689570ad2aa1dca4c7386be82579ec69956
 
 pkgname = bootc
