@@ -17,8 +17,9 @@ depends=(
   podman
 )
 arch=(x86_64)
-source=("https://github.com/bootc-dev/$pkgname/releases/download/v$pkgver/$pkgname-$pkgver.tar.zstd")
-sha256sums=('f56012088ba93607fc55a2c3ae38e7ca0bdcea128a85da8035901cdd3802566f')
+source=("https://github.com/bootc-dev/$pkgname/releases/download/v$pkgver/$pkgname-$pkgver.tar.zstd" "virtiofsd-path.patch")
+sha256sums=('f56012088ba93607fc55a2c3ae38e7ca0bdcea128a85da8035901cdd3802566f'
+            '247294f5ad02bdb654de4b67756669df91a9f24ec876620ba7175456ce67a3fa')
 
 prepare() {
   cd $pkgname-$pkgver
