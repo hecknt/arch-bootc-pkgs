@@ -24,7 +24,7 @@ prepare() {
 build() {
   cd "$pkgname-$pkgver"
   export CARGO_TARGET_DIR=target
-  make bin manpages
+  make bin
 }
 
 check() {
