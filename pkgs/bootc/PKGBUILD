@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
 pkgver=1.10.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64')
 url="https://github.com/bootc-dev/$pkgname"
@@ -23,13 +23,13 @@ prepare() {
 build() {
 	cd "$pkgname-$pkgver"
   export CARGO_TARGET_DIR=target
-  make bin
+  make bin manpages
 }
 
 check() {
-    export RUST_BACKTRACE=1
-    cd $pkgname-$pkgver
-    cargo test --frozen
+  export RUST_BACKTRACE=1
+  cd $pkgname-$pkgver
+  cargo test --frozen
 }
 
 package() {
