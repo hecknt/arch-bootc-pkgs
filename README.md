@@ -1,6 +1,6 @@
 # bootc Packages for Arch Linux
 
-This repository includes a few packages that are useful to boot [Arch Linux](https://archlinux.org) while utilizing [bootc](https://github.com/bootc-dev/bootc). All packages are listed in the `pkgs/` folder in the repository root.
+This branch of this repository includes a few packages that are actively being tested. It is not advised to use this repository for day-to-day usage.
 
 ## Using the repository
 
@@ -14,7 +14,7 @@ pacman-key --lsign-key 5DE6BF3EBC86402E7A5C5D241FA48C960F9604CB
 
 And add the following to `/etc/pacman.conf`:
 ```ini
-[bootc]
+[bootc-testing]
 SigLevel = Required
 Server = https://github.com/hecknt/arch-bootc-pkgs/releases/download/$repo
 ```
@@ -22,5 +22,5 @@ Server = https://github.com/hecknt/arch-bootc-pkgs/releases/download/$repo
 Afterwards, sync your repositories with `pacman -Sy`, and then install a package like so:
 
 ```bash
-pacman -S bootc
+pacman -S bootc-git
 ```
