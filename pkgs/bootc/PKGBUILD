@@ -1,14 +1,19 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
 pkgver=1.10.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64')
 url="https://github.com/bootc-dev/$pkgname"
 license=('MIT OR Apache-2.0')
-depends=(gcc-libs
+depends=(bash
+  gcc-libs
+  glib2
   glibc
-  ostree) 
+  openssl
+  ostree
+  zlib
+  zstd) 
 makedepends=(cargo
   go-md2man)
 source=("https://github.com/bootc-dev/bootc/releases/download/v$pkgver/bootc-$pkgver.tar.zstd" "pr1779.patch")
