@@ -16,8 +16,7 @@ makedepends=(cargo
 conflicts=(bootc)
 provides=("bootc=$pkgver")
 source=("git+$url.git")
-sha256sums=('SKIP'
-            'c6ab974a80242372b07891c51b3b9689570ad2aa1dca4c7386be82579ec69956')
+sha256sums=('SKIP')
 
 prepare() {
   cd "$_pkgname"
