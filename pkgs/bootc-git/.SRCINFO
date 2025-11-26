@@ -11,8 +11,9 @@ pkgbase = bootc-git
 	depends = gcc-libs
 	depends = glibc
 	depends = ostree
+	provides = bootc=1.10.0.r113.g535f1e7
+	conflicts = bootc
 	source = git+https://github.com/bootc-dev/bootc.git
-	source = pr1779.patch
 	sha256sums = SKIP
 	sha256sums = c6ab974a80242372b07891c51b3b9689570ad2aa1dca4c7386be82579ec69956
 
