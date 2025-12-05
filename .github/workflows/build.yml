@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Build PKGBUILDs
         uses: hecknt/archlinux-pkgbuilds@v0.2.0
+        env:
+          PACKAGER: "Hec <hec@heccraft.com>"
         with:
           repo_name: "bootc-testing"
           github_token: "${{ secrets.GITHUB_TOKEN }}"
