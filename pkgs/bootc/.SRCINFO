@@ -15,7 +15,7 @@ pkgbase = bootc
 	depends = ostree
 	depends = zlib
 	depends = zstd
-	source = https://github.com/bootc-dev/bootc/releases/download/v1.11.0/bootc-1.11.0.tar.zstd
-	sha256sums = 700d83df65ab860026ebf386ade15820a96336f3c27a1792519354f83ffb0563
+	source = git+https://github.com/bootc-dev/bootc.git
+	sha256sums = SKIP
 
 pkgname = bootc
