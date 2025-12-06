@@ -15,7 +15,8 @@ depends=(bash
   zlib
   zstd)
 makedepends=(cargo
-  go-md2man)
+  go-md2man
+  git)
 source=("git+$url.git")
 sha256sums=('SKIP')
 
