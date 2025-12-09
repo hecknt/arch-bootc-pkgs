@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
 pkgver=1.11.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64')
 url="https://github.com/bootc-dev/$pkgname"
@@ -17,12 +17,14 @@ depends=(bash
 makedepends=(cargo
   go-md2man
   git)
-source=("git+$url.git")
-sha256sums=('SKIP')
+source=("git+$url.git" "fix-usroverlay.patch")
+sha256sums=('SKIP'
+            'e530bc55f3c6549db8d2655f00b65d52bf33a399a45f6dda0fa36994307d01d7')
 
 prepare() {
   cd "$pkgname"
   git checkout v$pkgver
+  patch -Np1 -i "$srcdir/fix-usroverlay.patch"
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
