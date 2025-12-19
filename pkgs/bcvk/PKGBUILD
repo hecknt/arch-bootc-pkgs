@@ -17,7 +17,7 @@ depends=(
   virtiofsd
   podman
 )
-arch=(x86_64)
+arch=('x86_64' 'aarch64')
 source=("https://github.com/bootc-dev/$pkgname/releases/download/v$pkgver/$pkgname-$pkgver.tar.zstd")
 sha256sums=('77177a73132eca6c528c2969a7f1b7619178cc4afb1101ac6665e964f348168e')
 

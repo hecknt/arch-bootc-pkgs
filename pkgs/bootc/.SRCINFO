@@ -1,9 +1,10 @@
 pkgbase = bootc
 	pkgdesc = Boot and upgrade via container images
 	pkgver = 1.11.0
-	pkgrel = 1
+	pkgrel = 2
 	url = https://github.com/bootc-dev/bootc
 	arch = x86_64
+	arch = aarch64
 	license = MIT OR Apache-2.0
 	makedepends = cargo
 	makedepends = go-md2man
@@ -17,6 +18,8 @@ pkgbase = bootc
 	depends = zlib
 	depends = zstd
 	source = git+https://github.com/bootc-dev/bootc.git
+	source = fix-usroverlay.patch
 	sha256sums = SKIP
+	sha256sums = e530bc55f3c6549db8d2655f00b65d52bf33a399a45f6dda0fa36994307d01d7
 
 pkgname = bootc
