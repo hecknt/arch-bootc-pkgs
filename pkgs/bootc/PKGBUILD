@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
 pkgver=1.11.0 # renovate: datasource=github-releases depName=bootc-dev/bootc
-pkgrel=2
+pkgrel=3
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64' 'aarch64')
 url="https://github.com/bootc-dev/$pkgname"
