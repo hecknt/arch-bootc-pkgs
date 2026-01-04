@@ -1,9 +1,9 @@
 ---
 name: Build PKGBUILDs
 on:
-  pull_request:
-    branches:
-      - testing
+  # pull_request:
+  #   branches:
+  #     - testing
   # schedule:
   #   - cron: "35 7 * * *" # 7:35am UTC every day
   push:
