@@ -1,4 +1,7 @@
 {
+  extends: [
+    'config:best-practices',
+  ],
   "customManagers": [
     {
       "customType": "regex",
