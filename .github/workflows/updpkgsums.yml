@@ -1,0 +1,38 @@
+name: updpkgsums
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+
+jobs:
+  updpkgsums:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Find Updated Packages
+        run: |
+          #!/usr/bin/env bash
+          set -euxo pipefail
+
+          echo "pkgbuild=$(git diff --name-only origin/main origin/${GITHUB_HEAD_REF} "*PKGBUILD" | head -1 | xargs dirname)" >> $GITHUB_ENV
+
+      - name: Update Package Checksums and Validate the Package
+        if: ${{ env.pkgbuild != '' }}
+        uses: ./.github/actions/updpkgsums
+        with:
+          pkgname: ${{ env.pkgbuild }}
+
+      - name: Make Git Commit
+        if: ${{ env.pkgbuild != '' }}
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          file_pattern: '*/PKGBUILD */.SRCINFO'

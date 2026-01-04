@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 
 pkgname=bcvk
-pkgver=0.9.0
+pkgver=0.9.0 # renovate: datasource=github-releases depName=bootc-dev/bcvk
 pkgrel=1
 pkgdesc='Launches ephemeral VMs from bootc containers and creates disk images.'
 url='https://github.com/bootc-dev/bcvk'

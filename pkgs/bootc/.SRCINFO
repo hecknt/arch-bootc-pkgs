@@ -17,9 +17,9 @@ pkgbase = bootc
 	depends = ostree
 	depends = zlib
 	depends = zstd
-	source = git+https://github.com/bootc-dev/bootc.git
+	source = git+https://github.com/bootc-dev/bootc.git#tag=v1.11.0
 	source = fix-usroverlay.patch
-	sha256sums = SKIP
+	sha256sums = 1fbf32d7fb7abcc2f1374db3d4503eb5f2db469c46dc4ca7cc9f0be3890ce601
 	sha256sums = e530bc55f3c6549db8d2655f00b65d52bf33a399a45f6dda0fa36994307d01d7
 
 pkgname = bootc

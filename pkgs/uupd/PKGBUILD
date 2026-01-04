@@ -1,6 +1,6 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=uupd
-pkgver=1.2.5
+pkgver=1.2.5 # renovate: datasource=github-releases depName=ublue-os/uupd
 pkgrel=1
 pkgdesc="Centralized update service/checker made for Universal Blue"
 arch=('x86_64' 'aarch64')
