@@ -18,6 +18,6 @@ pkgbase = bootc
 	depends = zlib
 	depends = zstd
 	source = git+https://github.com/bootc-dev/bootc.git#tag=v1.12.0
-	sha256sums = 1fbf32d7fb7abcc2f1374db3d4503eb5f2db469c46dc4ca7cc9f0be3890ce601
+	sha256sums = 9497a1c9a74220a156d794e4bb492fcac2e887ffdfc7a7c9dfdf20b250ea520b
 
 pkgname = bootc
