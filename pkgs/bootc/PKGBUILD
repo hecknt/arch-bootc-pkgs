@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
-pkgver=1.11.0 # renovate: datasource=github-releases depName=bootc-dev/bootc
-pkgrel=3
+pkgver=1.12.0 # renovate: datasource=github-releases depName=bootc-dev/bootc
+pkgrel=1
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64' 'aarch64')
 url="https://github.com/bootc-dev/$pkgname"
@@ -17,13 +17,11 @@ depends=(bash
 makedepends=(cargo
   go-md2man
   git)
-source=("git+$url.git#tag=v$pkgver" "fix-usroverlay.patch")
-sha256sums=('1fbf32d7fb7abcc2f1374db3d4503eb5f2db469c46dc4ca7cc9f0be3890ce601'
-            'e530bc55f3c6549db8d2655f00b65d52bf33a399a45f6dda0fa36994307d01d7')
+source=("git+$url.git#tag=v$pkgver")
+sha256sums=('1fbf32d7fb7abcc2f1374db3d4503eb5f2db469c46dc4ca7cc9f0be3890ce601')
 
 prepare() {
   cd "$pkgname"
-  patch -Np1 -i "$srcdir/fix-usroverlay.patch"
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
