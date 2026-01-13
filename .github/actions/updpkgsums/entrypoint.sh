@@ -26,6 +26,11 @@ updpkgsums
 git diff PKGBUILD
 echo "::endgroup::"
 
+echo "::group::Resetting pkgrel on PKGBUILD"
+sed -i 's/^pkgrel=.*$/pkgrel=1/' PKGBUILD
+git diff PKGBUILD
+echo "::endgroup::"
+
 echo "::group::Installing depends using pacman"
 source PKGBUILD
 sudo pacman -Syu --needed --noconfirm "${depends[@]}" "${makedepends[@]}"

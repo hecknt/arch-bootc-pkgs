@@ -1,4 +1,5 @@
 name: 'Validate & Update Package Sums of Arch Linux Packages GitHub Action'
+description: 'Validate & Update Package Sums of Arch Linux Packages GitHub Action'
 
 inputs:
   pkgname:
