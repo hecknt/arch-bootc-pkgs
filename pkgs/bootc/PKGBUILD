@@ -39,6 +39,15 @@ check() {
 
 package() {
   cd "$pkgname"
+  ./target/release/bootc completion bash > bootc.bash
+  ./target/release/bootc completion zsh > bootc.zsh
+  ./target/release/bootc completion fish > bootc.fish
+  ./target/release/bootc completion elvish > bootc.elv
+  install -Dm0644 bootc.bash "$pkgdir/usr/share/bash-completion/completions/bootc"
+  install -Dm0644 bootc.zsh "$pkgdir/usr/share/zsh/site-functions/_bootc"
+  install -Dm0644 bootc.fish "$pkgdir/usr/share/fish/vendor_completions.d/bootc.fish"
+  install -Dm0644 bootc.elv "$pkgdir/usr/share/elvish/lib/bootc.elv"
+
   install -Dm 644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
   install -Dm 644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
   make DESTDIR="$pkgdir/" install-all
