@@ -21,7 +21,7 @@ jobs:
       contents: write
     steps:
       - name: Build PKGBUILDs
-        uses: hecknt/archlinux-pkgbuilds@v0.2.0
+        uses: hecknt/archlinux-pkgbuilds@v0.2.1
         env:
           PACKAGER: "Hec <hec@heccraft.com>"
         with:
