@@ -7,9 +7,15 @@ pkgdesc="Boot and upgrade via container images"
 arch=('x86_64')
 url="https://github.com/bootc-dev/$_pkgname"
 license=('MIT OR Apache-2.0')
-depends=(gcc-libs
+depends=(bash
+  gcc-libs
+  glib2
   glibc
-  ostree) 
+  openssl
+  ostree
+  skopeo
+  zlib
+  zstd) 
 makedepends=(cargo
   go-md2man
   git)
