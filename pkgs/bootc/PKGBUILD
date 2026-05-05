@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
 pkgver=1.15.2 # renovate: datasource=github-releases depName=bootc-dev/bootc
-pkgrel=1
+pkgrel=2
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64' 'aarch64')
 url="https://github.com/bootc-dev/$pkgname"
@@ -12,6 +12,7 @@ depends=(bash
   glibc
   openssl
   ostree
+  skopeo
   zlib
   zstd)
 makedepends=(cargo
