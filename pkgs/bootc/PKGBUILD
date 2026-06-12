@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
-pkgver=1.15.2 # renovate: datasource=github-releases depName=bootc-dev/bootc
-pkgrel=2
+pkgver=1.16.0 # renovate: datasource=github-releases depName=bootc-dev/bootc
+pkgrel=1
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64' 'aarch64')
 url="https://github.com/bootc-dev/$pkgname"
@@ -19,7 +19,7 @@ makedepends=(cargo
   go-md2man
   git)
 source=("git+$url.git#tag=v$pkgver")
-sha256sums=('9002d42377fbdb324f69bdf84684a182fcf7618cd30f62e3063829ebd7c2f9e4')
+sha256sums=('6e55ee8ed755db045c56053e51393c7f63e478c2b1721f28673168907ccc21d8')
 
 prepare() {
   cd "$pkgname"
