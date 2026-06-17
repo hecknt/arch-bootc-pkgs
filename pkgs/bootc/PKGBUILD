@@ -19,7 +19,7 @@ makedepends=(cargo
   go-md2man
   git)
 source=("git+$url.git#tag=v$pkgver")
-sha256sums=('6e55ee8ed755db045c56053e51393c7f63e478c2b1721f28673168907ccc21d8')
+sha256sums=('fbf0ab3b57de13f43a0d96ff5ad3782f2438bad14128d7223f5f7dc476b46bcb')
 
 prepare() {
   cd "$pkgname"
