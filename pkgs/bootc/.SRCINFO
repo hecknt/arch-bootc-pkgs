@@ -1,6 +1,6 @@
 pkgbase = bootc
 	pkgdesc = Boot and upgrade via container images
-	pkgver = 1.16.1
+	pkgver = 1.16.3
 	pkgrel = 1
 	url = https://github.com/bootc-dev/bootc
 	arch = x86_64
@@ -18,7 +18,7 @@ pkgbase = bootc
 	depends = skopeo
 	depends = zlib
 	depends = zstd
-	source = git+https://github.com/bootc-dev/bootc.git#tag=v1.16.1
-	sha256sums = fbf0ab3b57de13f43a0d96ff5ad3782f2438bad14128d7223f5f7dc476b46bcb
+	source = git+https://github.com/bootc-dev/bootc.git#tag=v1.16.3
+	sha256sums = cca02c5a40f68967361db44d9022c8250785baaa6668a41b9478402eb13bef6b
 
 pkgname = bootc
