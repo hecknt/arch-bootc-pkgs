@@ -1,7 +1,7 @@
 # Maintainer: Hec <hec@heccraft.com>
 
 pkgname=bcvk
-pkgver=0.17.0 # renovate: datasource=github-releases depName=bootc-dev/bcvk
+pkgver=0.18.0 # renovate: datasource=github-releases depName=bootc-dev/bcvk
 pkgrel=1
 pkgdesc='Launches ephemeral VMs from bootc containers and creates disk images.'
 url='https://github.com/bootc-dev/bcvk'
@@ -19,7 +19,7 @@ depends=(
 )
 arch=('x86_64' 'aarch64')
 source=("https://github.com/bootc-dev/$pkgname/releases/download/v$pkgver/$pkgname-$pkgver.tar.zstd")
-sha256sums=('75f949327e0ef05f5d1e37450f43ae8a5e8ddd6620baff07b6e6e45f7753c90e')
+sha256sums=('6631efcfaa4808776127eacff3e03ae1e3342d466a880109ce6326ce8c5cfc97')
 
 prepare() {
   cd $pkgname-$pkgver
