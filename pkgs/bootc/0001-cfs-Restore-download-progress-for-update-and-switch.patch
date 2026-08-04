@@ -1,0 +1,752 @@
+From 3da216d2bb15f72beb3e19bb56f099b0f89d91e7 Mon Sep 17 00:00:00 2001
+From: Colin Walters <walters@verbum.org>
+Date: Wed, 15 Jul 2026 16:50:26 -0400
+Subject: [PATCH 1/2] cfs: Restore download progress for update and switch
+
+Closes: #2316
+
+composefs switched to having a progress API instead of writing
+progress directly to the tty itself; we need to wire it up
+now to our progress infrastructure.
+
+Assisted-by: AI
+Signed-off-by: Colin Walters <walters@verbum.org>
+---
+ crates/lib/src/bootc_composefs/mod.rs      |   1 +
+ crates/lib/src/bootc_composefs/progress.rs | 490 +++++++++++++++++++++
+ crates/lib/src/bootc_composefs/repo.rs     |  51 ++-
+ crates/lib/src/bootc_composefs/switch.rs   |   5 +
+ crates/lib/src/bootc_composefs/update.rs   |  11 +
+ 5 files changed, 549 insertions(+), 9 deletions(-)
+ create mode 100644 crates/lib/src/bootc_composefs/progress.rs
+
+diff --git a/crates/lib/src/bootc_composefs/mod.rs b/crates/lib/src/bootc_composefs/mod.rs
+index 766083c5..42d52115 100644
+--- a/crates/lib/src/bootc_composefs/mod.rs
++++ b/crates/lib/src/bootc_composefs/mod.rs
+@@ -5,6 +5,7 @@ pub(crate) mod digest;
+ pub(crate) mod export;
+ pub(crate) mod finalize;
+ pub(crate) mod gc;
++pub(crate) mod progress;
+ pub(crate) mod repo;
+ pub(crate) mod rollback;
+ pub(crate) mod selinux;
+diff --git a/crates/lib/src/bootc_composefs/progress.rs b/crates/lib/src/bootc_composefs/progress.rs
+new file mode 100644
+index 00000000..daf33c36
+--- /dev/null
++++ b/crates/lib/src/bootc_composefs/progress.rs
+@@ -0,0 +1,490 @@
++//! Bridge composefs-rs's [`ProgressReporter`] callback API to bootc's own
++//! progress infrastructure (interactive `indicatif` bars and the
++//! `--progress-fd` JSON-Lines protocol).
++//!
++//! composefs-rs (`composefs::progress`) reports progress via a synchronous,
++//! `Send + Sync` callback trait invoked directly from whatever task is
++//! driving the pull. That's a poor fit for [`crate::progress_jsonl::ProgressWriter`],
++//! whose API is `async`. We bridge the two by handing composefs-rs a trivial
++//! reporter that forwards every [`ProgressEvent`] over an unbounded channel,
++//! and processing that channel from a concurrently spawned Tokio task which
++//! owns the `indicatif` state and the `ProgressWriter`. This mirrors the
++//! existing ostree pull progress plumbing in `crate::deploy` (see
++//! `handle_layer_progress_print`), which is channel-based for the same
++//! reason.
++
++use std::collections::HashMap;
++
++use composefs_ctl::composefs::progress::{
++    ComponentId, ProgressEvent, ProgressReporter, ProgressUnit, SharedReporter,
++};
++use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
++use tokio::sync::mpsc;
++use tokio::task::JoinHandle;
++
++use crate::progress_jsonl::{Event, ProgressWriter, SubTaskBytes};
++
++/// Number of leading characters of a [`ComponentId`] (typically a
++/// `sha256:`-prefixed layer digest) to show in terminal output.
++const ID_DISPLAY_LEN: usize = 20;
++
++/// Forwards [`ProgressEvent`]s from composefs-rs's synchronous callback onto
++/// an unbounded channel for asynchronous processing.
++struct ChannelReporter {
++    tx: mpsc::UnboundedSender<ProgressEvent>,
++}
++
++impl ProgressReporter for ChannelReporter {
++    fn report(&self, event: ProgressEvent) {
++        // Errors mean the receiving task has already exited (e.g. the pull
++        // was aborted); there's nothing useful to do at that point.
++        let _ = self.tx.send(event);
++    }
++}
++
++/// State tracked per in-flight component so we can render both an
++/// `indicatif` bar and, for byte-oriented transfers, a JSON-Lines subtask.
++struct ActiveComponent {
++    unit: ProgressUnit,
++    fetched: u64,
++    total: Option<u64>,
++    bar: ProgressBar,
++}
++
++/// Start bridging composefs-rs progress events into bootc's UI.
++///
++/// Returns a [`SharedReporter`] to pass as `PullOptions::progress`, and the
++/// [`JoinHandle`] for the background task driving the UI. The task exits
++/// once every clone of the returned reporter has been dropped (which
++/// happens naturally when the `composefs_oci::pull` future completes and
++/// drops its `PullOptions`); callers should `.await` the join handle after
++/// awaiting the pull to ensure the terminal output is flushed before
++/// proceeding, and to recover the (possibly-mutated) `ProgressWriter`.
++pub(crate) fn spawn(
++    quiet: bool,
++    prog: ProgressWriter,
++) -> (SharedReporter, JoinHandle<ProgressWriter>) {
++    let (tx, rx) = mpsc::unbounded_channel();
++    let reporter: SharedReporter = std::sync::Arc::new(ChannelReporter { tx });
++    let handle = tokio::spawn(drive_progress(rx, quiet, prog));
++    (reporter, handle)
++}
++
++/// Truncate a [`ComponentId`] for compact display.
++fn short_id(id: &ComponentId) -> String {
++    let s = id.as_str();
++    s.chars().take(ID_DISPLAY_LEN).collect()
++}
++
++fn bar_style(unit: ProgressUnit) -> ProgressStyle {
++    let template = match unit {
++        ProgressUnit::Bytes => {
++            "[eta {eta}] {bar:40.cyan/blue} {binary_bytes:>9}/{binary_total_bytes:9} {msg}"
++        }
++        ProgressUnit::Items => "[eta {eta}] {bar:40.cyan/blue} {pos:>7}/{len:7} objects {msg}",
++        // `ProgressUnit` is `#[non_exhaustive]`; fall back to a generic style
++        // for any future variant.
++        _ => "[eta {eta}] {bar:40.cyan/blue} {pos}/{len} {msg}",
++    };
++    ProgressStyle::with_template(template)
++        .unwrap_or_else(|_| ProgressStyle::default_bar())
++        .progress_chars("##-")
++}
++
++/// Rebuild the JSON-Lines subtask list from the currently in-flight
++/// byte-oriented components (composefs-rs does not expose object-count
++/// progress in a form the `ProgressBytes` schema can represent, so
++/// [`ProgressUnit::Items`] components only drive the terminal UI).
++fn json_subtasks<'a>(
++    active: &'a HashMap<ComponentId, ActiveComponent>,
++) -> (Vec<SubTaskBytes<'a>>, u64, u64) {
++    let mut bytes_fetched = 0u64;
++    let mut bytes_total = 0u64;
++    let mut total_known = true;
++    let mut subtasks = Vec::new();
++    for (id, comp) in active {
++        if comp.unit != ProgressUnit::Bytes {
++            continue;
++        }
++        bytes_fetched = bytes_fetched.saturating_add(comp.fetched);
++        match comp.total {
++            Some(total) => bytes_total = bytes_total.saturating_add(total),
++            None => total_known = false,
++        }
++        let label = short_id(id);
++        subtasks.push(SubTaskBytes {
++            subtask: "composefs_layer".into(),
++            description: format!("Layer: {label}").into(),
++            id: id.as_str().into(),
++            // Unlike `steps_cached` below, there's no equivalent byte count
++            // available here: `ProgressEvent::Skipped` (composefs-rs's signal
++            // for an already-present component) carries only a `ComponentId`,
++            // not a size, even though callers generally know the size at the
++            // point they emit it (e.g. from the OCI manifest descriptor).
++            // Until composefs-rs's `Skipped` event carries a `total`, we have
++            // no way to attribute cached bytes to a specific subtask.
++            bytes_cached: 0,
++            bytes: comp.fetched,
++            bytes_total: comp.total.unwrap_or(0),
++        });
++    }
++    // `bytes_total == 0` is the protocol's way of saying "unspecified"; only
++    // report a real aggregate when every in-flight component's size is known.
++    if !total_known {
++        bytes_total = 0;
++    }
++    (subtasks, bytes_fetched, bytes_total)
++}
++
++/// Background task consuming [`ProgressEvent`]s and updating both the
++/// interactive terminal display and the JSON-Lines progress writer.
++async fn drive_progress(
++    mut rx: mpsc::UnboundedReceiver<ProgressEvent>,
++    quiet: bool,
++    prog: ProgressWriter,
++) -> ProgressWriter {
++    let multi = MultiProgress::new();
++    if quiet {
++        multi.set_draw_target(ProgressDrawTarget::hidden());
++    }
++
++    let mut active: HashMap<ComponentId, ActiveComponent> = HashMap::new();
++    // Components actually downloaded this run, versus ones that were already
++    // present (`ProgressEvent::Skipped`) and thus required no network I/O.
++    // Kept separate to match the `steps`/`steps_cached` convention used by
++    // the ostree pull path (see `crate::deploy`): `steps` counts real work
++    // done now, `steps_cached` counts work a prior run already did.
++    let mut steps_done: u64 = 0;
++    let mut steps_cached: u64 = 0;
++    // Whether any component has actually started, finished, or been skipped
++    // yet. Used instead of `!subtasks.is_empty()` to decide whether to emit
++    // a JSON-Lines update: gating on "a `Bytes`-unit component is currently
++    // active" would both drop the final update once the last component
++    // completes and `active` drains back to empty, and suppress every
++    // update during a purely `Items`-unit pull (e.g. a containers-storage
++    // zero-copy import), which never populates `subtasks` at all.
++    let mut any_activity = false;
++
++    while let Some(event) = rx.recv().await {
++        // `Done`/`Skipped` are discrete, one-shot milestones (a component's
++        // step count changes exactly once), unlike the continuous `Progress`
++        // ticks within a single component's transfer. Send those via the
++        // non-lossy `ProgressWriter::send`, matching the convention already
++        // used for the equivalent ostree layer-completion event in
++        // `crate::deploy` ("Cannot be lossy or it is dropped"): `send_lossy`
++        // silently drops updates that land within its refresh window, which
++        // would otherwise risk losing the final `steps`/`steps_cached` tally
++        // when components complete in a tight burst.
++        let mut required = false;
++
++        match event {
++            ProgressEvent::Started { id, total, unit } => {
++                let bar = if let Some(total) = total {
++                    multi.add(ProgressBar::new(total))
++                } else {
++                    multi.add(ProgressBar::new_spinner())
++                };
++                bar.set_style(bar_style(unit));
++                bar.set_message(short_id(&id));
++                active.insert(
++                    id,
++                    ActiveComponent {
++                        unit,
++                        fetched: 0,
++                        total,
++                        bar,
++                    },
++                );
++                any_activity = true;
++            }
++            ProgressEvent::Progress { id, fetched, total } => {
++                if let Some(comp) = active.get_mut(&id) {
++                    if let Some(total) = total {
++                        comp.bar.set_length(total);
++                        comp.total = Some(total);
++                    }
++                    comp.bar.set_position(fetched);
++                    comp.fetched = fetched;
++                }
++            }
++            ProgressEvent::Done { id, transferred } => {
++                if let Some(comp) = active.remove(&id) {
++                    comp.bar.finish_and_clear();
++                    let _ = transferred;
++                }
++                steps_done = steps_done.saturating_add(1);
++                any_activity = true;
++                required = true;
++            }
++            ProgressEvent::Skipped { id } => {
++                if let Some(comp) = active.remove(&id) {
++                    comp.bar.finish_with_message("skipped");
++                }
++                steps_cached = steps_cached.saturating_add(1);
++                any_activity = true;
++                required = true;
++            }
++            ProgressEvent::Message(msg) => {
++                let _ = multi.println(msg);
++            }
++            // `ProgressEvent` is `#[non_exhaustive]`; ignore future variants
++            // rather than failing to compile against newer composefs-rs.
++            _ => {}
++        }
++
++        let (subtasks, bytes, bytes_total) = json_subtasks(&active);
++        let event = Event::ProgressBytes {
++            task: "pulling".into(),
++            description: "Pulling composefs image".into(),
++            id: "composefs-pull".into(),
++            // See the comment on `bytes_cached` in `json_subtasks`: unlike
++            // `steps_cached`, composefs-rs gives us no way to know how
++            // many bytes an already-present (`Skipped`) component would
++            // have been, so this can't be anything but 0 for now.
++            bytes_cached: 0,
++            bytes,
++            // Total across all in-flight components is inherently a
++            // moving target since composefs-rs does not report an
++            // upfront count of components; report 0 ("unspecified")
++            // unless every in-flight component has a known size.
++            bytes_total,
++            steps_cached,
++            steps: steps_done,
++            steps_total: 0,
++            subtasks,
++        };
++        if required {
++            prog.send(event).await;
++        } else if any_activity {
++            prog.send_lossy(event).await;
++        }
++    }
++
++    prog
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn active_component(unit: ProgressUnit, fetched: u64, total: Option<u64>) -> ActiveComponent {
++        ActiveComponent {
++            unit,
++            fetched,
++            total,
++            bar: ProgressBar::hidden(),
++        }
++    }
++
++    #[test]
++    fn test_short_id_truncates_long_ids() {
++        let id: ComponentId =
++            "sha256:abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".into();
++        let short = short_id(&id);
++        assert_eq!(short.chars().count(), ID_DISPLAY_LEN);
++        assert!(id.as_str().starts_with(&short));
++    }
++
++    #[test]
++    fn test_short_id_passes_through_short_ids() {
++        let id: ComponentId = "obj-1".into();
++        assert_eq!(short_id(&id), "obj-1");
++    }
++
++    #[test]
++    fn test_json_subtasks_ignores_items_unit() {
++        let mut active = HashMap::new();
++        active.insert(
++            ComponentId::from("objects"),
++            active_component(ProgressUnit::Items, 5, Some(10)),
++        );
++        let (subtasks, bytes, bytes_total) = json_subtasks(&active);
++        assert!(
++            subtasks.is_empty(),
++            "Items-unit components have no bytes subtask"
++        );
++        assert_eq!(bytes, 0);
++        assert_eq!(bytes_total, 0);
++    }
++
++    #[test]
++    fn test_json_subtasks_aggregates_known_totals() {
++        let mut active = HashMap::new();
++        active.insert(
++            ComponentId::from("layer-a"),
++            active_component(ProgressUnit::Bytes, 100, Some(200)),
++        );
++        active.insert(
++            ComponentId::from("layer-b"),
++            active_component(ProgressUnit::Bytes, 50, Some(300)),
++        );
++        let (subtasks, bytes, bytes_total) = json_subtasks(&active);
++        assert_eq!(subtasks.len(), 2);
++        assert_eq!(bytes, 150);
++        assert_eq!(bytes_total, 500);
++    }
++
++    #[test]
++    fn test_json_subtasks_unknown_total_is_unspecified() {
++        let mut active = HashMap::new();
++        active.insert(
++            ComponentId::from("layer-a"),
++            active_component(ProgressUnit::Bytes, 100, Some(200)),
++        );
++        active.insert(
++            ComponentId::from("layer-b"),
++            // Total isn't known yet for this component.
++            active_component(ProgressUnit::Bytes, 10, None),
++        );
++        let (subtasks, bytes, bytes_total) = json_subtasks(&active);
++        assert_eq!(subtasks.len(), 2);
++        assert_eq!(bytes, 110);
++        // Since one component's total is unknown, the aggregate must be
++        // reported as unspecified (0) rather than an understated value.
++        assert_eq!(bytes_total, 0);
++    }
++
++    #[tokio::test]
++    async fn test_drive_progress_runs_to_completion_on_channel_close() {
++        let (reporter, handle) = spawn(true, ProgressWriter::default());
++        reporter.report(ProgressEvent::Started {
++            id: "layer-a".into(),
++            total: Some(100),
++            unit: ProgressUnit::Bytes,
++        });
++        reporter.report(ProgressEvent::Progress {
++            id: "layer-a".into(),
++            fetched: 100,
++            total: Some(100),
++        });
++        reporter.report(ProgressEvent::Done {
++            id: "layer-a".into(),
++            transferred: 100,
++        });
++        reporter.report(ProgressEvent::Message("done".into()));
++        // Dropping the reporter closes the channel, letting the task exit.
++        drop(reporter);
++        handle.await.expect("progress task should not panic");
++    }
++
++    /// Reads every `ProgressBytes` event from a [`ProgressWriter`] pipe until
++    /// EOF, returning `(steps, steps_cached, subtasks.len())` for each one in
++    /// the order received.
++    async fn collect_progress_bytes(
++        recv: tokio::net::unix::pipe::Receiver,
++    ) -> Vec<(u64, u64, usize)> {
++        use tokio::io::{AsyncBufReadExt, BufReader};
++
++        let mut lines = BufReader::new(recv).lines();
++        let mut events = Vec::new();
++        while let Some(line) = lines.next_line().await.expect("read line") {
++            if let Ok(crate::progress_jsonl::Event::ProgressBytes {
++                steps,
++                steps_cached,
++                subtasks,
++                ..
++            }) = serde_json::from_str(&line)
++            {
++                events.push((steps, steps_cached, subtasks.len()));
++            }
++        }
++        events
++    }
++
++    /// `Done` (actually downloaded) and `Skipped` (already present) events
++    /// must be tallied into `steps`/`steps_cached` separately rather than a
++    /// single shared counter, matching the convention used by the ostree
++    /// pull path (`crate::deploy`). Both are sent via the non-lossy
++    /// `ProgressWriter::send`, so no delay is needed between them to dodge
++    /// `send_lossy`'s rate limiting.
++    #[tokio::test]
++    async fn test_drive_progress_reports_steps_cached_separately() {
++        let (send, recv) = tokio::net::unix::pipe::pipe().expect("create pipe");
++        let prog: ProgressWriter = send.try_into().expect("ProgressWriter from pipe");
++        let (reporter, handle) = spawn(true, prog);
++
++        reporter.report(ProgressEvent::Started {
++            id: "layer-fetched".into(),
++            total: Some(100),
++            unit: ProgressUnit::Bytes,
++        });
++        reporter.report(ProgressEvent::Done {
++            id: "layer-fetched".into(),
++            transferred: 100,
++        });
++        reporter.report(ProgressEvent::Skipped {
++            id: "layer-cached".into(),
++        });
++        drop(reporter);
++        handle.await.expect("progress task should not panic");
++
++        // The last event reflects the final tally: one component was
++        // actually fetched (Done) and one was already cached (Skipped).
++        let events = collect_progress_bytes(recv).await;
++        let &(steps, steps_cached, _) = events.last().expect("at least one event observed");
++        assert_eq!(steps, 1, "one component was actually downloaded");
++        assert_eq!(steps_cached, 1, "one component was already cached");
++    }
++
++    /// Once the last in-flight component finishes, `active` drains back to
++    /// empty and `json_subtasks` has nothing left to report — but the final
++    /// `steps`/`steps_cached` tally must still be flushed rather than
++    /// silently dropped just because there's no `Bytes`-unit subtask left to
++    /// show alongside it.
++    #[tokio::test]
++    async fn test_drive_progress_flushes_final_event_after_last_component_finishes() {
++        let (send, recv) = tokio::net::unix::pipe::pipe().expect("create pipe");
++        let prog: ProgressWriter = send.try_into().expect("ProgressWriter from pipe");
++        let (reporter, handle) = spawn(true, prog);
++
++        reporter.report(ProgressEvent::Started {
++            id: "layer-a".into(),
++            total: Some(100),
++            unit: ProgressUnit::Bytes,
++        });
++        reporter.report(ProgressEvent::Done {
++            id: "layer-a".into(),
++            transferred: 100,
++        });
++        drop(reporter);
++        handle.await.expect("progress task should not panic");
++
++        let events = collect_progress_bytes(recv).await;
++        let &(steps, _, subtasks_len) = events.last().expect("at least one event observed");
++        assert_eq!(steps, 1, "the completed component must still be counted");
++        assert_eq!(
++            subtasks_len, 0,
++            "no components remain in flight to report as subtasks"
++        );
++    }
++
++    /// A pull consisting solely of [`ProgressUnit::Items`] components (e.g. a
++    /// containers-storage zero-copy import) never populates `json_subtasks`,
++    /// since that unit has no `SubTaskBytes` representation. Progress must
++    /// still be reported at the aggregate `steps`/`steps_cached` level rather
++    /// than emitting nothing at all for the whole pull.
++    #[tokio::test]
++    async fn test_drive_progress_reports_steps_for_items_only_pull() {
++        let (send, recv) = tokio::net::unix::pipe::pipe().expect("create pipe");
++        let prog: ProgressWriter = send.try_into().expect("ProgressWriter from pipe");
++        let (reporter, handle) = spawn(true, prog);
++
++        reporter.report(ProgressEvent::Started {
++            id: "objects".into(),
++            total: Some(10),
++            unit: ProgressUnit::Items,
++        });
++        reporter.report(ProgressEvent::Done {
++            id: "objects".into(),
++            transferred: 10,
++        });
++        drop(reporter);
++        handle.await.expect("progress task should not panic");
++
++        let events = collect_progress_bytes(recv).await;
++        let &(steps, _, _) = events
++            .last()
++            .expect("an Items-only pull must still emit progress events");
++        assert_eq!(steps, 1);
++    }
++}
+diff --git a/crates/lib/src/bootc_composefs/repo.rs b/crates/lib/src/bootc_composefs/repo.rs
+index c5bfd4c3..65d0c799 100644
+--- a/crates/lib/src/bootc_composefs/repo.rs
++++ b/crates/lib/src/bootc_composefs/repo.rs
+@@ -55,10 +55,12 @@ use ostree_ext::containers_image_proxy;
+ 
+ use cap_std_ext::cap_std::{ambient_authority, fs::Dir};
+ 
++use crate::bootc_composefs::progress;
+ use crate::composefs_consts::BOOTC_TAG_PREFIX;
+ use crate::install::{RootSetup, State};
+ use crate::lsm;
+ use crate::podstorage::CStorage;
++use crate::progress_jsonl::ProgressWriter;
+ 
+ /// Create a composefs OCI tag name for the given manifest digest.
+ ///
+@@ -136,7 +138,17 @@ pub(crate) async fn initialize_composefs_repository(
+         let imgstore = CStorage::create(rootfs_dir, &run, sepolicy.as_ref())?;
+         let storage_path = root_setup.physical_root_path.join(CStorage::subpath());
+ 
+-        let r = pull_composefs_unified(&imgstore, storage_path.as_str(), &repo, &imgref).await?;
++        // `bootc install` does not yet plumb `--quiet`/`--progress-fd` down to
++        // this path; use defaults for now (terminal progress still renders).
++        let r = pull_composefs_unified(
++            &imgstore,
++            storage_path.as_str(),
++            &repo,
++            &imgref,
++            false,
++            ProgressWriter::default(),
++        )
++        .await?;
+ 
+         // SELinux-label the containers-storage now that all pulls are done.
+         imgstore
+@@ -146,7 +158,7 @@ pub(crate) async fn initialize_composefs_repository(
+     } else {
+         // Direct path: pull directly into composefs via skopeo, without
+         // containers-storage as intermediary.
+-        pull_composefs_direct(&repo, &imgref).await?
++        pull_composefs_direct(&repo, &imgref, false, ProgressWriter::default()).await?
+     };
+ 
+     // Tag the manifest as a bootc-owned GC root.
+@@ -186,6 +198,8 @@ pub(crate) struct PullRepoResult {
+ async fn pull_composefs_direct(
+     repo: &Arc<crate::store::ComposefsRepository>,
+     imgref: &containers_image_proxy::ImageReference,
++    quiet: bool,
++    prog: ProgressWriter,
+ ) -> Result<PullResult<Sha512HashValue>> {
+     let imgref_str = imgref.to_string();
+     tracing::info!("Direct pull: fetching {imgref_str} into composefs repository");
+@@ -193,19 +207,28 @@ async fn pull_composefs_direct(
+     let mut config = crate::deploy::new_proxy_config();
+     ostree_ext::container::apply_container_proxy_opts_for_transport(&mut config, imgref.transport)?;
+ 
++    let (reporter, prog_task) = progress::spawn(quiet, prog);
++
+     let pull_result = composefs_oci::pull(
+         repo,
+         &imgref_str,
+         None,
+         PullOptions {
+             img_proxy_config: Some(config),
++            progress: Some(reporter),
+             ..Default::default()
+         },
+     )
+-    .await
+-    .context("Pulling image into composefs repository")?;
++    .await;
+ 
+-    Ok(pull_result)
++    // Awaiting the progress task after the pull future completes ensures the
++    // reporter's `Arc` (and hence the channel it feeds) has been dropped, so
++    // the background task drains its queue and exits rather than hanging.
++    prog_task
++        .await
++        .context("Composefs progress task panicked")?;
++
++    pull_result.context("Pulling image into composefs repository")
+ }
+ 
+ /// Pull an image via unified storage: first into bootc-owned containers-storage,
+@@ -227,6 +250,8 @@ async fn pull_composefs_unified(
+     storage_path: &str,
+     repo: &Arc<crate::store::ComposefsRepository>,
+     imgref: &containers_image_proxy::ImageReference,
++    quiet: bool,
++    prog: ProgressWriter,
+ ) -> Result<PullResult<Sha512HashValue>> {
+     let image = &imgref.name;
+ 
+@@ -256,6 +281,7 @@ async fn pull_composefs_unified(
+     tracing::info!("Unified pull: importing from {cstor_imgref_str} (zero-copy)");
+ 
+     let storage = std::path::Path::new(storage_path);
++    let (reporter, prog_task) = progress::spawn(quiet, prog);
+     let pull_opts = PullOptions {
+         // The image is already in bootc-owned containers-storage at this point
+         // (placed there by Stage 1 of the unified pull). Use ZeroCopy so we
+@@ -264,11 +290,16 @@ async fn pull_composefs_unified(
+         // are on different filesystems or the storage root is wrong.
+         local_fetch: LocalFetchOpt::ZeroCopy,
+         storage_root: Some(storage),
++        progress: Some(reporter),
+         ..Default::default()
+     };
+-    let pull_result = composefs_oci::pull(repo, &cstor_imgref_str, None, pull_opts)
++    let pull_result = composefs_oci::pull(repo, &cstor_imgref_str, None, pull_opts).await;
++
++    prog_task
+         .await
+-        .context("Importing from containers-storage into composefs")?;
++        .context("Composefs progress task panicked")?;
++
++    let pull_result = pull_result.context("Importing from containers-storage into composefs")?;
+ 
+     Ok(pull_result)
+ }
+@@ -288,6 +319,8 @@ pub(crate) async fn pull_composefs_repo(
+     spec_imgref: &crate::spec::ImageReference,
+     allow_missing_fsverity: bool,
+     use_unified: bool,
++    quiet: bool,
++    prog: ProgressWriter,
+ ) -> Result<PullRepoResult> {
+     const COMPOSEFS_PULL_JOURNAL_ID: &str = "4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8";
+ 
+@@ -338,9 +371,9 @@ pub(crate) async fn pull_composefs_repo(
+         let imgstore = CStorage::create(&rootfs_dir, &run, sepolicy.as_ref())?;
+         let storage_path = format!("/sysroot/{}", CStorage::subpath());
+ 
+-        pull_composefs_unified(&imgstore, &storage_path, &repo, &imgref).await?
++        pull_composefs_unified(&imgstore, &storage_path, &repo, &imgref, quiet, prog).await?
+     } else {
+-        pull_composefs_direct(&repo, &imgref).await?
++        pull_composefs_direct(&repo, &imgref, quiet, prog).await?
+     };
+ 
+     // Tag the manifest as a bootc-owned GC root.
+diff --git a/crates/lib/src/bootc_composefs/switch.rs b/crates/lib/src/bootc_composefs/switch.rs
+index 3f8b5af8..ed325c49 100644
+--- a/crates/lib/src/bootc_composefs/switch.rs
++++ b/crates/lib/src/bootc_composefs/switch.rs
+@@ -7,6 +7,7 @@ use crate::{
+         update::{DoUpgradeOpts, UpdateAction, do_upgrade, is_image_pulled, validate_update},
+     },
+     cli::{SwitchOpts, imgref_for_switch},
++    progress_jsonl::ProgressWriter,
+     store::{BootedComposefs, Storage},
+ };
+ 
+@@ -72,11 +73,15 @@ pub(crate) async fn switch_composefs(
+         booted_unified || target_unified
+     };
+ 
++    let prog: ProgressWriter = opts.progress.try_into()?;
++
+     let do_upgrade_opts = DoUpgradeOpts {
+         soft_reboot: opts.soft_reboot,
+         apply: opts.apply,
+         download_only: false,
+         use_unified,
++        quiet: opts.quiet,
++        prog,
+     };
+ 
+     if let Some(cfg_verity) = image {
+diff --git a/crates/lib/src/bootc_composefs/update.rs b/crates/lib/src/bootc_composefs/update.rs
+index e0e67795..b436f2ec 100644
+--- a/crates/lib/src/bootc_composefs/update.rs
++++ b/crates/lib/src/bootc_composefs/update.rs
+@@ -31,6 +31,7 @@ use crate::{
+         COMPOSEFS_STAGED_DEPLOYMENT_FNAME, COMPOSEFS_TRANSIENT_STATE_DIR, STATE_DIR_RELATIVE,
+         TYPE1_ENT_PATH_STAGED, USER_CFG_STAGED,
+     },
++    progress_jsonl::ProgressWriter,
+     spec::{Host, ImageReference},
+     store::{BootedComposefs, ComposefsRepository, Storage},
+ };
+@@ -210,6 +211,10 @@ pub(crate) struct DoUpgradeOpts {
+     pub(crate) download_only: bool,
+     /// Whether to use unified storage (containers-storage + composefs).
+     pub(crate) use_unified: bool,
++    /// Suppress interactive progress output.
++    pub(crate) quiet: bool,
++    /// Structured (JSON-Lines) progress sink; see `--progress-fd`.
++    pub(crate) prog: ProgressWriter,
+ }
+ 
+ async fn apply_upgrade(
+@@ -260,6 +265,8 @@ pub(crate) async fn do_upgrade(
+         imgref,
+         booted_cfs.cmdline.allow_missing_fsverity,
+         opts.use_unified,
++        opts.quiet,
++        opts.prog.clone(),
+     )
+     .await?;
+ 
+@@ -370,11 +377,15 @@ pub(crate) async fn upgrade_composefs(
+         None
+     };
+ 
++    let prog: ProgressWriter = opts.progress.try_into()?;
++
+     let mut do_upgrade_opts = DoUpgradeOpts {
+         soft_reboot: opts.soft_reboot,
+         apply: opts.apply,
+         download_only: opts.download_only,
+         use_unified: false,
++        quiet: opts.quiet,
++        prog,
+     };
+ 
+     if opts.from_downloaded {
+-- 
+2.55.0
+
