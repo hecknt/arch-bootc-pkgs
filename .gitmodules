@@ -1,0 +1,3 @@
+[submodule "pkgs/shim-signed"]
+	path = pkgs/shim-signed
+	url = https://aur.archlinux.org/shim-signed.git
