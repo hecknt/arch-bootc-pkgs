@@ -1,6 +1,6 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
-pkgver=1.16.10 # renovate: datasource=github-releases depName=bootc-dev/bootc
+pkgver=1.17.1 # renovate: datasource=github-releases depName=bootc-dev/bootc
 pkgrel=1
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64' 'aarch64')
@@ -19,7 +19,10 @@ makedepends=(cargo
   go-md2man
   git)
 source=("git+$url.git#tag=v$pkgver")
-sha256sums=('2552723a16a2d8183f55b9d0bcefbe3e70c5e9ff375436cb8f72b756a422dcb0')
+sha256sums=('03a9c86708f6526fe8fae2f5cd2fa6db534753b638f56b6f327a306116976e0a')
+
+# Arch Linux doesn't have libselinux, so we need to explicitly disable its usage in bootc's build
+_cargo_options=(--no-default-features --features install-to-disk)
 
 prepare() {
   cd "$pkgname"
@@ -29,13 +32,13 @@ prepare() {
 build() {
   cd "$pkgname"
   export CARGO_TARGET_DIR=target
-  make bin
+  make bin CARGO_OPTIONS="${_cargo_options[*]}"
 }
 
 check() {
   export RUST_BACKTRACE=1
   cd $pkgname
-  cargo test --frozen
+  cargo test --frozen ${_cargo_options[*]}
 }
 
 package() {
@@ -49,7 +52,7 @@ package() {
   install -Dm0644 bootc.fish "$pkgdir/usr/share/fish/vendor_completions.d/bootc.fish"
   install -Dm0644 bootc.elv "$pkgdir/usr/share/elvish/lib/bootc.elv"
 
-  install -Dm 644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
-  install -Dm 644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
-  make DESTDIR="$pkgdir/" install-all
+  install -Dm644 "LICENSE-APACHE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
+  install -Dm644 "LICENSE-MIT" "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
+  make DESTDIR="$pkgdir/" install-all CARGO_OPTIONS="${_cargo_options[*]}"
 }
