@@ -1,6 +1,6 @@
 # Maintainer: Hec <hec@heccraft.com>
 pkgname=bootc
-pkgver=1.17.3 # renovate: datasource=github-releases depName=bootc-dev/bootc
+pkgver=1.17.4 # renovate: datasource=github-releases depName=bootc-dev/bootc
 pkgrel=1
 pkgdesc="Boot and upgrade via container images"
 arch=('x86_64' 'aarch64')
@@ -19,7 +19,7 @@ makedepends=(cargo
   go-md2man
   git)
 source=("git+$url.git#tag=v$pkgver")
-sha256sums=('6d823e58040c0eb5b7428adeb3afd7a7b16f72cf9ca1f0e8758fa779806d9c9a')
+sha256sums=('0a77bfd694ed03b025ec40dccf478bebef793298ed53d38aea9126f900f45c92')
 
 # Arch Linux doesn't have libselinux, so we need to explicitly disable its usage in bootc's build
 _cargo_options=(--no-default-features --features install-to-disk)
