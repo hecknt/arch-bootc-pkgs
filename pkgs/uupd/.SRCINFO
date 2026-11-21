@@ -1,6 +1,6 @@
 pkgbase = uupd
 	pkgdesc = Centralized update service/checker made for Universal Blue
-	pkgver = 1.5.7
+	pkgver = 1.5.8
 	pkgrel = 1
 	url = https://github.com/ublue-os/uupd
 	arch = x86_64
@@ -13,7 +13,7 @@ pkgbase = uupd
 	optdepends = bootc
 	optdepends = distrobox
 	optdepends = flatpak
-	source = https://github.com/ublue-os/uupd/archive/refs/tags/v1.5.7.tar.gz
-	sha256sums = e2bca0973dcaa9c922b50fb3ed32f12ae23ee3c4c5f3b31b6f945148cabf81a5
+	source = https://github.com/ublue-os/uupd/archive/refs/tags/v1.5.8.tar.gz
+	sha256sums = 16dd0c4fadc27a66c16e06496408936a13e8c9cec64b3ad070e608ca76fe6cd9
 
 pkgname = uupd
