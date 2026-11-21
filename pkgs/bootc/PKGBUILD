@@ -19,7 +19,7 @@ makedepends=(cargo
   go-md2man
   git)
 source=("git+$url.git#tag=v$pkgver")
-sha256sums=('0a77bfd694ed03b025ec40dccf478bebef793298ed53d38aea9126f900f45c92')
+sha256sums=('dac168cc6da63fb1fff1a42133adb8d2cd30e5dbe2698f5d8cfe2ede9abeaf30')
 
 # Arch Linux doesn't have libselinux, so we need to explicitly disable its usage in bootc's build
 _cargo_options=(--no-default-features --features install-to-disk)
