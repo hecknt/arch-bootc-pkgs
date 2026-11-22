@@ -10,7 +10,7 @@ depends=(bash
   gcc-libs
   glib2
   glibc
-  openssl
+  openssl-3
   ostree
   skopeo
   zlib
