@@ -32,13 +32,15 @@ prepare() {
 build() {
   cd "$pkgname"
   export CARGO_TARGET_DIR=target
-  make bin CARGO_OPTIONS="${_cargo_options[*]}"
+  PKG_CONFIG_PATH=/usr/lib/openssl-3/pkgconfig \
+    make bin CARGO_OPTIONS="${_cargo_options[*]}"
 }
 
 check() {
   export RUST_BACKTRACE=1
   cd $pkgname
-  cargo test --frozen ${_cargo_options[*]}
+  PKG_CONFIG_PATH=/usr/lib/openssl-3/pkgconfig \
+    cargo test --frozen ${_cargo_options[*]}
 }
 
 package() {
