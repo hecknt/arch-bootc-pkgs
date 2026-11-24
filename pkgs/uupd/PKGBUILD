@@ -14,7 +14,7 @@ optdepends=(bootc
   distrobox
   flatpak)
 source=(https://github.com/ublue-os/$pkgname/archive/refs/tags/v$pkgver.tar.gz)
-sha256sums=('16dd0c4fadc27a66c16e06496408936a13e8c9cec64b3ad070e608ca76fe6cd9')
+sha256sums=('6a835202e03ff635157348f451f9967a62cd5c39d8402b89822d5a1f1d492ae7')
 
 build() {
 	cd "$pkgname-$pkgver"
